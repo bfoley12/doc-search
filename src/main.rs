@@ -108,3 +108,94 @@ pub fn main() {
             }
         });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    fn setup_test_dir() -> TempDir {
+        let dir = TempDir::new().unwrap();
+
+        fs::write(dir.path().join("ignore.txt"), "ranomd content").unwrap();
+
+        fs::write(dir.path().join("ignore.pdf"), "random content").unwrap();
+
+        let fixture_dir = Path::new("test_data");
+        fs::copy(fixture_dir.join("sample.odt"), dir.path().join("sample.odt")).unwrap();
+        fs::copy(fixture_dir.join("sample.docx"), dir.path().join("sample.docx")).unwrap();
+        fs::copy(fixture_dir.join("sample.doc"), dir.path().join("sample.doc")).unwrap();
+
+        dir
+    }
+
+    #[test]
+    fn test_ignores_txt_files() {
+        let dir = setup_test_dir();
+        let entry = WalkDir::new(dir.path())
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .find(|e| e.path().extension().map_or(false, |ext| ext == "txt"))
+            .unwrap();
+        assert!(!is_valid(&entry));
+    }
+
+    #[test]
+    fn test_accepts_odt_files() {
+        let dir = setup_test_dir();
+        let entry = WalkDir::new(dir.path())
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .find(|e| e.path().extension().map_or(false, |ext| ext == "odt"))
+            .unwrap();
+        assert!(is_valid(&entry));
+    }
+
+    #[test]
+    fn test_search_finds_pattern() {
+        let dir = setup_test_dir();
+        let entry = WalkDir::new(dir.path())
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .find(|e| e.path().extension().map_or(false, |ext| ext == "odt"))
+            .unwrap();
+        assert!(search_file(&entry.path(), "hello world", &1).is_ok());
+    }
+
+    #[test]
+    fn test_search_rejects_missing_pattern() {
+        let dir = setup_test_dir();
+        let entry = WalkDir::new(dir.path())
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .find(|e| e.path().extension().map_or(false, |ext| ext == "odt"))
+            .unwrap();
+        assert!(!search_file(&entry.path(), "nonexistent gibberish", &1).is_ok());
+    }
+    
+    #[test]
+    fn test_get_paragraphs() {
+        let content = "the cat sat\na dog ran\nthe cat returned";
+        let result = get_paragraphs(content, "cat");
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].0, 0);
+        assert_eq!(result[1].0, 2);
+    }
+    
+    #[test]
+    fn test_build_response_verbosity_1() {
+        let path = Path::new("/test/file.odt");
+        let content = "the cat sat\na dog ran";
+        let result = build_response(path, content, "cat", &1);
+        assert_eq!(result, "/test/file.odt");
+    }
+    
+    #[test]
+    fn test_build_response_verbosity_2() {
+        let path = Path::new("/test/file.odt");
+        let content = "the cat sat\na dog ran\nthe cat returned";
+        let result = build_response(path, content, "cat", &2);
+        assert_eq!(result, "/test/file.odt (0, 2)");
+    }
+}
