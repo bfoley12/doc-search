@@ -1,6 +1,6 @@
 use clap::Parser;
 use litchi::{ odf, Document };
-use std::path::PathBuf;
+use std::path::{ Path, PathBuf };
 use walkdir::{ WalkDir, DirEntry };
 
 #[derive(Parser)]
@@ -13,6 +13,9 @@ struct Cli {
     
     #[arg(short, long, default_value_t = 1)]
     recursive: i8,
+    
+    #[arg(short, long, default_value_t = 1)]
+    verbosity: i8,
 }
 fn is_valid(entry: &DirEntry) -> bool {
     entry.file_name()
@@ -33,18 +36,51 @@ impl From<litchi::Error> for SearchError {
         SearchError(e.to_string())
     }
 }
-fn search_file(entry: &DirEntry, pattern: &str) -> Result<String, SearchError> {
-    let path = entry.path();
+fn get_paragraphs<'a>(content: &'a str, pattern: &str) -> Vec<(usize, &'a str)> {
+    content
+        .split("\n")
+        .enumerate()
+        .filter(|(_, s)| s.contains(pattern))
+        .collect()
+}
+
+fn build_response(path: &Path, content: &str, pattern: &str, verbosity: &i8) -> String {
+    let res = format!("{}", path.display());
+    match verbosity {
+        1 => res,
+        2 => {
+            let line_nums: Vec<String> = get_paragraphs(content, pattern)
+                .iter()
+                .map(|(i, _)| i.to_string())
+                .collect();
+            format!("{} ({})", res, line_nums.join(", "))
+        },
+        _ => {
+            let lines_str: String = get_paragraphs(content, pattern)
+                .iter()
+                .map(|(i, s)| format!("  {}: {}", i, s))
+                .collect::<Vec<String>>()
+                .join("\n");
+            format!("{}\n{}", res, lines_str)
+        },
+    }
+}
+fn search_file(path: &Path, pattern: &str, verbosity: &i8) -> Result<String, SearchError> {
     let content = match path.extension().and_then(|e| e.to_str()) {
-        Some("odt") => odf::Document::open(path)?.text()?,
-        Some("docx") => Document::open(path)?.text()?,
-        Some("doc") => Document::open(path)?.text()?,
-        _ => return Err(SearchError("unsupported format".into())),
+        Some("odt") => {
+            let mut doc = odf::Document::open(path)?;
+            doc.text()?
+        }
+        Some("docx") | Some("doc") => {
+            let doc = Document::open(path)?;
+            doc.text()?
+        }
+        _ => { String::from("") }
     };
     if content.contains(pattern) {
-        Ok(format!("{}", entry.path().display()))
-    } else {
-        Err(SearchError(format!("{} does not contain {}", entry.path().display(), pattern)))
+        Ok(build_response(path, &content, pattern, verbosity))
+    } else{
+        Err(SearchError(format!("{} does not cotain {}", path.display(), pattern)))
     }
 }
 pub fn main() {
@@ -57,9 +93,9 @@ pub fn main() {
         .filter_map(|e| e.ok())
         .filter(|entry| is_valid(&entry))
         .for_each(|entry| {
-            match search_file(&entry, &args.pattern) {
+            match search_file(entry.path(), &args.pattern, &args.verbosity) {
                 Ok(v) => {
-                    println!("{}", v)
+                    println!("{}", v);
                 }
                 Err(_) => {
                     
