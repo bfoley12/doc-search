@@ -44,8 +44,11 @@ fn search_file(entry: &DirEntry, pattern: &str) -> Result<String, SearchError> {
 }
 pub fn main() {
     let args = Cli::parse();
-    WalkDir::new(args.path)
-        .into_iter()
+    let mut wd = WalkDir::new(args.path);
+    if args.recursive < 1 {
+        wd = wd.max_depth(1);
+    }
+    wd.into_iter()
         .filter_map(|e| e.ok())
         .filter(|entry| is_valid(&entry))
         .for_each(|entry| {
