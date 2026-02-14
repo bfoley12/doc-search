@@ -3,18 +3,27 @@ use litchi::{ odf, Document };
 use std::path::{ Path, PathBuf };
 use walkdir::{ WalkDir, DirEntry };
 
+/// Simple program to search for (regex) patterns in odt and doc(x) files
 #[derive(Parser)]
-struct Cli {
-    #[arg(short, long)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Pattern to search the files for
     pattern: String,
     
+    /// Path to directory to search
     #[arg(long, default_value = ".")]
     path: PathBuf,
     
+    /// How deep to recursively search[>= 1]
     #[arg(short, long, default_value_t = 1)]
-    recursive: i8,
+    max_depth: usize,
     
-    #[arg(short, long, default_value_t = 1)]
+    /// How verbose the response is [1-3]
+    #[arg(short, long, default_value_t = 1,
+        long_help = "How verbose the response is\n\
+        1: Reports paths to files containing pattern\n\
+        2: Reports paths and paragraph numbers containing pattern\n\
+        3: Reports paths, paragraph numbers, and paragraph content containing pattern")]
     verbosity: i8,
 }
 fn is_valid(entry: &DirEntry) -> bool {
@@ -84,12 +93,10 @@ fn search_file(path: &Path, pattern: &str, verbosity: &i8) -> Result<String, Sea
     }
 }
 pub fn main() {
-    let args = Cli::parse();
-    let mut wd = WalkDir::new(args.path);
-    if args.recursive < 1 {
-        wd = wd.max_depth(1);
-    }
-    wd.into_iter()
+    let args = Args::parse();
+    WalkDir::new(args.path)
+        .max_depth(args.max_depth)
+        .into_iter()
         .filter_map(|e| e.ok())
         .filter(|entry| is_valid(&entry))
         .for_each(|entry| {
@@ -97,9 +104,7 @@ pub fn main() {
                 Ok(v) => {
                     println!("{}", v);
                 }
-                Err(_) => {
-                    
-                }
+                Err(_) => {}
             }
         });
 }
