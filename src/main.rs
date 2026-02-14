@@ -1,5 +1,5 @@
 use clap::Parser;
-use litchi::odf;
+use litchi::{ odf, Document };
 use std::path::PathBuf;
 use walkdir::{ WalkDir, DirEntry };
 
@@ -34,8 +34,13 @@ impl From<litchi::Error> for SearchError {
     }
 }
 fn search_file(entry: &DirEntry, pattern: &str) -> Result<String, SearchError> {
-    let mut doc = odf::Document::open(entry.path())?;
-    let content = doc.text()?;
+    let path = entry.path();
+    let content = match path.extension().and_then(|e| e.to_str()) {
+        Some("odt") => odf::Document::open(path)?.text()?,
+        Some("docx") => Document::open(path)?.text()?,
+        Some("doc") => Document::open(path)?.text()?,
+        _ => return Err(SearchError("unsupported format".into())),
+    };
     if content.contains(pattern) {
         Ok(format!("{}", entry.path().display()))
     } else {
