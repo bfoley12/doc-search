@@ -2,6 +2,7 @@ use clap::Parser;
 use litchi::{ odf, Document };
 use std::path::{ Path, PathBuf };
 use walkdir::{ WalkDir, DirEntry };
+use regex::{Regex, RegexBuilder};
 
 /// Simple program to search for (regex) patterns in odt and doc(x) files
 #[derive(Parser)]
@@ -45,15 +46,15 @@ impl From<litchi::Error> for SearchError {
         SearchError(e.to_string())
     }
 }
-fn get_paragraphs<'a>(content: &'a str, pattern: &str) -> Vec<(usize, &'a str)> {
+fn get_paragraphs<'a>(content: &'a str, pattern: &Regex) -> Vec<(usize, &'a str)> {
     content
         .split("\n")
         .enumerate()
-        .filter(|(_, s)| s.contains(pattern))
+        .filter(|(_, s)| pattern.is_match(s))
         .collect()
 }
 
-fn build_response(path: &Path, content: &str, pattern: &str, verbosity: &i8) -> String {
+fn build_response(path: &Path, content: &str, pattern: &Regex, verbosity: &i8) -> String {
     let res = format!("{}", path.display());
     match verbosity {
         1 => res,
@@ -74,7 +75,7 @@ fn build_response(path: &Path, content: &str, pattern: &str, verbosity: &i8) -> 
         },
     }
 }
-fn search_file(path: &Path, pattern: &str, verbosity: &i8) -> Result<String, SearchError> {
+fn search_file(path: &Path, pattern: &Regex, verbosity: &i8) -> Result<String, SearchError> {
     let content = match path.extension().and_then(|e| e.to_str()) {
         Some("odt") => {
             let mut doc = odf::Document::open(path)?;
@@ -86,7 +87,7 @@ fn search_file(path: &Path, pattern: &str, verbosity: &i8) -> Result<String, Sea
         }
         _ => { String::from("") }
     };
-    if content.contains(pattern) {
+    if pattern.is_match(&content) {
         Ok(build_response(path, &content, pattern, verbosity))
     } else{
         Err(SearchError(format!("{} does not cotain {}", path.display(), pattern)))
@@ -94,13 +95,20 @@ fn search_file(path: &Path, pattern: &str, verbosity: &i8) -> Result<String, Sea
 }
 pub fn main() {
     let args = Args::parse();
+    let pattern = RegexBuilder::new(&args.pattern)
+        .multi_line(true)
+        .build()
+        .unwrap_or_else(|e| {
+        eprintln!("Invalid pattern: {}", e);
+        std::process::exit(1);
+    });
     WalkDir::new(args.path)
         .max_depth(args.max_depth)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|entry| is_valid(&entry))
         .for_each(|entry| {
-            match search_file(entry.path(), &args.pattern, &args.verbosity) {
+            match search_file(entry.path(), &pattern, &args.verbosity) {
                 Ok(v) => {
                     println!("{}", v);
                 }
@@ -160,7 +168,8 @@ mod tests {
             .filter_map(|e| e.ok())
             .find(|e| e.path().extension().map_or(false, |ext| ext == "odt"))
             .unwrap();
-        assert!(search_file(&entry.path(), "hello world", &1).is_ok());
+        let reg = Regex::new("hello world").unwrap();
+        assert!(search_file(&entry.path(), &reg, &1).is_ok());
     }
 
     #[test]
@@ -171,13 +180,15 @@ mod tests {
             .filter_map(|e| e.ok())
             .find(|e| e.path().extension().map_or(false, |ext| ext == "odt"))
             .unwrap();
-        assert!(!search_file(&entry.path(), "nonexistent gibberish", &1).is_ok());
+        let reg = Regex::new("nonexistent gibberish").unwrap();
+        assert!(!search_file(&entry.path(), &reg, &1).is_ok());
     }
     
     #[test]
     fn test_get_paragraphs() {
         let content = "the cat sat\na dog ran\nthe cat returned";
-        let result = get_paragraphs(content, "cat");
+        let reg = Regex::new("cat").unwrap();
+        let result = get_paragraphs(content, &reg);
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].0, 0);
         assert_eq!(result[1].0, 2);
@@ -187,7 +198,8 @@ mod tests {
     fn test_build_response_verbosity_1() {
         let path = Path::new("/test/file.odt");
         let content = "the cat sat\na dog ran";
-        let result = build_response(path, content, "cat", &1);
+        let reg = Regex::new("cat").unwrap();
+        let result = build_response(path, content, &reg, &1);
         assert_eq!(result, "/test/file.odt");
     }
     
@@ -195,7 +207,83 @@ mod tests {
     fn test_build_response_verbosity_2() {
         let path = Path::new("/test/file.odt");
         let content = "the cat sat\na dog ran\nthe cat returned";
-        let result = build_response(path, content, "cat", &2);
+        let reg = Regex::new("cat").unwrap();
+        let result = build_response(path, content, &reg, &2);
         assert_eq!(result, "/test/file.odt (0, 2)");
+    }
+    
+    #[test]
+    fn test_regex_character_class() {
+        let content = "the cat sat\na dog ran\nthe bat returned";
+        let reg = Regex::new("[cb]at").unwrap();
+        let result = get_paragraphs(content, &reg);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].1, "the cat sat");
+        assert_eq!(result[1].1, "the bat returned");
+    }
+    
+    #[test]
+    fn test_regex_wildcard() {
+        let content = "hello world\nhello there\ngoodbye world";
+        let reg = Regex::new("hello.*world").unwrap();
+        let result = get_paragraphs(content, &reg);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0, 0);
+    }
+    
+    #[test]
+    fn test_regex_start_of_line() {
+        let content = "cat is here\nthe cat sat\ncat returns";
+        let reg = RegexBuilder::new("^cat").multi_line(true).build().unwrap();
+        let result = get_paragraphs(content, &reg);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].0, 0);
+        assert_eq!(result[1].0, 2);
+    }
+    
+    #[test]
+    fn test_regex_end_of_line() {
+        let content = "I saw a cat\nthe dog ran\nhere is a cat";
+        let reg = RegexBuilder::new("cat$").multi_line(true).build().unwrap();
+        let result = get_paragraphs(content, &reg);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].0, 0);
+        assert_eq!(result[1].0, 2);
+    }
+    
+    #[test]
+    fn test_regex_case_insensitive() {
+        let content = "Hello World\nhello world\nHELLO WORLD";
+        let reg = RegexBuilder::new("hello world").case_insensitive(true).build().unwrap();
+        let result = get_paragraphs(content, &reg);
+        assert_eq!(result.len(), 3);
+    }
+    
+    #[test]
+    fn test_regex_digit_matching() {
+        let content = "item 1\nno number here\nitem 42\nstill nothing";
+        let reg = Regex::new(r"\d+").unwrap();
+        let result = get_paragraphs(content, &reg);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].0, 0);
+        assert_eq!(result[1].0, 2);
+    }
+    
+    #[test]
+    fn test_plain_string_still_works() {
+        let content = "hello world\ngoodbye world\nhello again";
+        let reg = Regex::new("hello").unwrap();
+        let result = get_paragraphs(content, &reg);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].0, 0);
+        assert_eq!(result[1].0, 2);
+    }
+    
+    #[test]
+    fn test_regex_no_match() {
+        let content = "hello world\ngoodbye world";
+        let reg = Regex::new(r"^\d{3}-\d{4}$").unwrap();
+        let result = get_paragraphs(content, &reg);
+        assert_eq!(result.len(), 0);
     }
 }

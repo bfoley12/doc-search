@@ -1,11 +1,12 @@
 [package]
 name = "doc_search"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 exclude = ["test_data/", ".gitignore"]
 
 [dependencies]
 clap = { version = "4.5.58", features = ["derive"] }
 litchi = { version = "0.0.1", features = ["odf"] }
+regex = "1.12.3"
 tempfile = "3.25.0"
 walkdir = "2.5.0"
