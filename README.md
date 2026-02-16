@@ -21,7 +21,7 @@ doc_search budget -p ./reports -v 3
 
 Also accepts regex to search with
 ```bash
-doc_search 
+doc_search ^[a-z].* -p ./reports
 ```
 
 ## Verbosity Levels
