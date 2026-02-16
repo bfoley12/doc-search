@@ -7,7 +7,7 @@ license = "MIT"
 repository = "https://github.com/bfoley12/doc-search"
 readme = "README.md"
 keywords = ["search", "odt", "doc", "docx", "grep"]
-categories = "command-line-utilities"
+categories = ["command-line-utilities"]
 exclude = ["test_data/", ".gitignore"]
 
 [dependencies]
