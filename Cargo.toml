@@ -2,6 +2,12 @@
 name = "doc_search"
 version = "1.0.0"
 edition = "2024"
+description = "Search for regex patterns in odt and doc(x) files"
+license = "MIT"
+repository = "https://github.com/bfoley12/doc-search"
+readme = "README.md"
+keywords = ["search", "odt", "doc", "docx", "grep"]
+categories = "command-line-utilities"
 exclude = ["test_data/", ".gitignore"]
 
 [dependencies]
