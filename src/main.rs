@@ -15,9 +15,9 @@ struct Args {
     #[arg(long, default_value = ".")]
     path: PathBuf,
     
-    /// How deep to recursively search[>= 1]
-    #[arg(short, long, default_value_t = 1)]
-    max_depth: usize,
+    /// How deep to recursively search[>=0]
+    #[arg(short, long, default_value_t = usize::MAX)]
+    depth: usize,
     
     /// How verbose the response is [1-3]
     #[arg(short, long, default_value_t = 1,
@@ -103,7 +103,7 @@ pub fn main() {
         std::process::exit(1);
     });
     WalkDir::new(args.path)
-        .max_depth(args.max_depth)
+        .max_depth(args.depth)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|entry| is_valid(&entry))

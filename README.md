@@ -17,6 +17,13 @@ doc_search budget -p ./reports -v 2
 
 # Show matching paragraphs with content
 doc_search budget -p ./reports -v 3
+
+# Limit search to current direct children of reports
+doc_search budget -p ./reports -d 1
+
+# Search file directly
+doc_search budget -p ./reports/June.odt -d 0 # (explicit)
+doc_search budget -p ./reports/June.odt # (implicit)
 ```
 
 Also accepts regex to search with
