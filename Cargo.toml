@@ -5,6 +5,7 @@ edition = "2024"
 description = "Search for regex patterns in odt and doc(x) files"
 license = "MIT"
 repository = "https://github.com/bfoley12/doc-search"
+homepage = "https://github.com/bfoley12/doc-search"
 readme = "README.md"
 keywords = ["search", "odt", "doc", "docx", "grep"]
 categories = ["command-line-utilities"]
@@ -16,3 +17,8 @@ litchi = { version = "0.0.1", features = ["odf"] }
 regex = "1.12.3"
 tempfile = "3.25.0"
 walkdir = "2.5.0"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
